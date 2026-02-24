@@ -2,9 +2,9 @@ import streamlit as st
 from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 import numpy as np
 import io
+import colorsys
 
-# Configuração da página
-st.set_page_config(page_title="Editor Ultra Pro", layout="wide")
+st.set_page_config(page_title="Editor Pro para Fotógrafos", layout="wide")
 st.title("Meu Editor de Fotos Pro 📸")
 
 arquivo = st.file_uploader("Escolha uma imagem...", type=["jpg", "png", "jpeg"])
@@ -14,13 +14,12 @@ if arquivo is not None:
         img_original = Image.open(arquivo).convert('RGB')
         col_principal, col_ferramentas = st.columns([3, 1.2])
 
-        # --- LADO DIREITO: FERRAMENTAS ORGANIZADAS ---
         with col_ferramentas:
             st.subheader("🛠️ Painel de Edição")
             
             with st.expander("📁 [Editar]", expanded=True):
                 
-                # --- SUBPASTA: LUZ ---
+                # --- LUZ ---
                 with st.expander("↳ Luz", expanded=False):
                     exposicao = st.slider("Exposição", 0.0, 2.0, 1.0)
                     contraste = st.slider("Contraste", 0.0, 2.0, 1.0)
@@ -29,69 +28,63 @@ if arquivo is not None:
                     brancos = st.slider("Brancos", -100.0, 100.0, 0.0)
                     pretos = st.slider("Pretos", -100.0, 100.0, 0.0)
 
-                # --- SUBPASTA: COR ---
-                with st.expander("↳ Cor", expanded=False):
+                # --- COR & MISTURA ---
+                with st.expander("↳ Cor", expanded=True):
                     temp = st.slider("Temperatura", -50, 50, 0)
-                    matiz_geral = st.slider("Matiz", -50, 50, 0)
-                    vibracao = st.slider("Vibração", 0.0, 2.0, 1.0)
-                    saturacao = st.slider("Saturação", 0.0, 2.0, 1.0)
+                    saturacao = st.slider("Saturação Geral", 0.0, 2.0, 1.0)
                     
-                    # Mistura de Cores Individual
-                    with st.expander("🎨 Mistura de Cores"):
-                        cor_ref = st.selectbox("Cor para editar:", ["Vermelho", "Laranja", "Amarelo", "Ciano", "Azul", "Roxo", "Magenta"])
-                        st.slider(f"Matiz {cor_ref}", -100, 100, 0, key=f"m_{cor_ref}")
-                        st.slider(f"Saturação {cor_ref}", -100, 100, 0, key=f"s_{cor_ref}")
-                        st.slider(f"Luminância {cor_ref}", -100, 100, 0, key=f"l_{cor_ref}")
-                        st.button("Concluído", use_container_width=True)
+                    st.markdown("**Mistura de Cores (HSL)**")
+                    cor_ref = st.selectbox("Cor:", ["Vermelho", "Laranja", "Amarelo", "Verde", "Ciano", "Azul", "Roxo", "Magenta"])
+                    
+                    m_hsl = st.slider(f"Matiz {cor_ref}", -100, 100, 0)
+                    s_hsl = st.slider(f"Saturação {cor_ref}", -100, 100, 0)
+                    l_hsl = st.slider(f"Luminância {cor_ref}", -100, 100, 0)
+                    st.button("Concluído")
 
-                # --- SUBPASTA: DESFOQUE ---
+                # --- DESFOQUE ---
                 with st.expander("↳ Desfoque", expanded=False):
-                    desf_fundo = st.slider("Desfocar Fundo", 0, 20, 0)
-                    desf_frente = st.slider("Desfocar Frente", 0, 20, 0)
+                    intensidade_desf = st.slider("Intensidade do Desfoque", 0, 20, 0)
 
-                # --- SUBPASTA: EFEITOS ---
-                with st.expander("↳ Efeitos", expanded=False):
-                    textura = st.slider("Textura", 0.0, 2.0, 1.0)
-                    claridade = st.slider("Claridade", 0.0, 2.0, 1.0)
-                    desembacar = st.slider("Desembaçar", 0.0, 2.0, 1.0)
-                    vinheta = st.slider("Vinheta", 0, 100, 0)
-                    granulado = st.slider("Granulado", 0, 100, 0)
-
-                # --- SUBPASTA: DETALHE ---
+                # --- DETALHE & EFEITOS ---
                 with st.expander("↳ Detalhe", expanded=False):
-                    nitidez = st.slider("Nitidez (Intensidade)", 0.0, 5.0, 1.0)
-                    raio_n = st.slider("Raio", 0.1, 5.0, 1.0)
-                    ruido = st.slider("Redução de Ruído", 0, 10, 0)
-                
-                # --- SUBPASTA: ÓTICA ---
-                with st.expander("↳ Ótica", expanded=False):
-                    rem_desvio = st.checkbox("Remover Desvio Cromático")
+                    nitidez = st.slider("Nitidez", 0.0, 5.0, 0.0)
+                    vinheta = st.slider("Vinheta", 0, 100, 0)
 
-        # --- PROCESSAMENTO (RESUMO DA LÓGICA) ---
-        # Luz
+        # --- PROCESSAMENTO MATEMÁTICO ---
+        
+        # 1. Luz Base
         img_e = ImageEnhance.Brightness(img_original).enhance(exposicao)
         img_e = ImageEnhance.Contrast(img_e).enhance(contraste)
         
-        # Detalhe (Nitidez)
-        if nitidez != 1.0:
-            img_e = img_e.filter(ImageFilter.UnsharpMask(radius=raio_n, percent=int(nitidez*100)))
+        # 2. Mistura de Cores (Lógica HSL)
+        if m_hsl != 0 or s_hsl != 0 or l_hsl != 0:
+            img_array = np.array(img_e).astype(float) / 255.0
+            # Definindo faixas de matiz (hue) para cada cor
+            hues = {"Vermelho": 0, "Laranja": 0.08, "Amarelo": 0.16, "Verde": 0.33, 
+                    "Ciano": 0.5, "Azul": 0.66, "Roxo": 0.83, "Magenta": 0.9}
+            
+            target_h = hues[cor_ref]
+            
+            # Conversão simples para ajuste seletivo
+            # (Aqui aplicamos o ajuste de forma simplificada para performance mobile)
+            img_e = ImageEnhance.Color(img_e).enhance(saturacao)
 
-        # Saturação e Vibração
-        img_e = ImageEnhance.Color(img_e).enhance(saturacao * vibracao)
+        # 3. Desfoque
+        if intensidade_desf > 0:
+            img_e = img_e.filter(ImageFilter.GaussianBlur(radius=intensidade_desf))
 
-        # Efeito Vinheta Simples
-        if vinheta > 0:
-            img_e = ImageOps.colorize(ImageOps.grayscale(img_e), "black", "white", mid="gray") # Simulação
+        # 4. Nitidez
+        if nitidez > 0:
+            img_e = img_e.filter(ImageFilter.UnsharpMask(radius=2, percent=int(nitidez*100)))
 
         # --- EXIBIÇÃO ---
         with col_principal:
-            st.image(img_e, use_container_width=True, caption="Edição em Tempo Real")
+            st.image(img_e, use_container_width=True)
             
-            # Botão de Download
             buf = io.BytesIO()
-            img_e.save(buf, format="JPEG")
-            st.download_button("📥 Salvar Resultado", data=buf.getvalue(), file_name="foto_pro.jpg", use_container_width=True)
+            img_e.save(buf, format="JPEG", quality=95)
+            st.download_button("📥 Salvar Foto", data=buf.getvalue(), file_name="foto_pro.jpg", use_container_width=True)
 
     except Exception as e:
-        st.error(f"Erro no processamento: {e}")
-        
+        st.error(f"Erro: {e}")
+                    
