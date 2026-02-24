@@ -21,35 +21,31 @@ if arquivo is not None:
     brancos = st.sidebar.slider("Brancos", -50, 50, 0)
     pretos = st.sidebar.slider("Pretos", -50, 50, 0)
 
-    # --- PROCESSAMENTO ---
-    
-    # 1. Exposição (usando Brilho como base)
-    img = ImageEnhance.Brightness(img).enhance(exposicao)
-    
-    # 2. Contraste
-    img = ImageEnhance.Contrast(img).enhance(contraste)
-    
-    # 3. Realces e Sombras (Simulação matemática)
+    # --- PROCESSAMENTO AVANÇADO ---
     img_array = np.array(img).astype(float)
+    
+    # 1. Exposição e Contraste (Bibliotecas padrão são ótimas para isso)
+    img = ImageEnhance.Brightness(img).enhance(exposicao)
+    img = ImageEnhance.Contrast(img).enhance(contraste)
+    img_array = np.array(img).astype(float)
+
+    # 2. Lógica de Máscaras para Brancos e Pretos
+    # Criamos uma máscara que identifica onde a imagem é clara (>180) ou escura (<70)
+    mascara_brancos = (img_array > 180).astype(float)
+    mascara_pretos = (img_array < 70).astype(float)
+
+    # Aplicamos o ajuste apenas onde a máscara permite
+    # O valor é suavizado para não criar manchas estranhas
+    img_array += (brancos * mascara_brancos)
+    img_array += (pretos * mascara_pretos)
+
+    # 3. Realces e Sombras (Ajuste fino)
     if realces != 1.0:
         img_array[img_array > 128] *= realces
     if sombras != 1.0:
         img_array[img_array <= 128] *= sombras
-        
-    # 4. Brancos e Pretos
-    img_array = img_array + brancos  # Ajusta os tons claros
-    img_array = img_array + pretos   # Ajusta os tons escuros
-    
+
     # Garante que as cores fiquem no limite de 0 a 255
     img_array = np.clip(img_array, 0, 255).astype(np.uint8)
     img = Image.fromarray(img_array)
-
-    # --- EXIBIÇÃO ---
-    st.image(img, caption="Imagem Ajustada", use_container_width=True)
     
-    # Botão de download atualizado com a imagem editada
-    import io
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG")
-    byte_im = buf.getvalue()
-    st.download_button("Baixar Foto Editada", data=byte_im, file_name="foto_pro.jpg", mime="image/jpeg")
