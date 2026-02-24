@@ -1,51 +1,64 @@
 import streamlit as st
 from PIL import Image, ImageOps, ImageEnhance
 import numpy as np
+import io
 
+# Configuração da página
 st.set_page_config(page_title="Editor Pro v3", layout="centered")
 st.title("Meu Editor de Fotos Pro 📸")
 
 arquivo = st.file_uploader("Escolha uma imagem...", type=["jpg", "png", "jpeg"])
 
 if arquivo is not None:
-    img = Image.open(arquivo).convert('RGB')
-    
-    # --- BARRA LATERAL DE COMPOSIÇÃO DE LUZ ---
-    st.sidebar.header("✨ Composição da Luz")
-    
-    # Criando as barras medidoras (Sliders)
-    exposicao = st.sidebar.slider("Exposição", 0.0, 2.0, 1.0)
-    contraste = st.sidebar.slider("Contraste", 0.0, 2.0, 1.0)
-    realces = st.sidebar.slider("Realces (Highlights)", 0.0, 2.0, 1.0)
-    sombras = st.sidebar.slider("Sombras", 0.0, 2.0, 1.0)
-    brancos = st.sidebar.slider("Brancos", -50, 50, 0)
-    pretos = st.sidebar.slider("Pretos", -50, 50, 0)
+    # Abrir a imagem de forma segura
+    try:
+        img_original = Image.open(arquivo).convert('RGB')
+        
+        # --- BARRA LATERAL ---
+        st.sidebar.header("✨ Composição da Luz")
+        exposicao = st.sidebar.slider("Exposição", 0.0, 2.0, 1.0)
+        contraste = st.sidebar.slider("Contraste", 0.0, 2.0, 1.0)
+        realces = st.sidebar.slider("Realces", 0.0, 2.0, 1.0)
+        sombras = st.sidebar.slider("Sombras", 0.0, 2.0, 1.0)
+        brancos = st.sidebar.slider("Brancos", -100.0, 100.0, 0.0)
+        pretos = st.sidebar.slider("Pretos", -100.0, 100.0, 0.0)
 
-    # --- PROCESSAMENTO AVANÇADO ---
-    img_array = np.array(img).astype(float)
-    
-    # 1. Exposição e Contraste (Bibliotecas padrão são ótimas para isso)
-    img = ImageEnhance.Brightness(img).enhance(exposicao)
-    img = ImageEnhance.Contrast(img).enhance(contraste)
-    img_array = np.array(img).astype(float)
+        # --- PROCESSAMENTO ---
+        # 1. Aplicar Exposição e Contraste primeiro
+        img_edit = ImageEnhance.Brightness(img_original).enhance(exposicao)
+        img_edit = ImageEnhance.Contrast(img_edit).enhance(contraste)
+        
+        # Converter para Array para manipulação precisa de pixels
+        img_array = np.array(img_edit).astype(float)
 
-    # 2. Lógica de Máscaras para Brancos e Pretos
-    # Criamos uma máscara que identifica onde a imagem é clara (>180) ou escura (<70)
-    mascara_brancos = (img_array > 180).astype(float)
-    mascara_pretos = (img_array < 70).astype(float)
+        # 2. Máscaras para Brancos e Pretos (Lógica Seletiva)
+        # Brancos: Afeta apenas pixels acima de 200 de luminosidade
+        mask_brancos = np.clip((img_array - 200) / 55, 0, 1) if brancos != 0 else 0
+        img_array += brancos * mask_brancos
 
-    # Aplicamos o ajuste apenas onde a máscara permite
-    # O valor é suavizado para não criar manchas estranhas
-    img_array += (brancos * mascara_brancos)
-    img_array += (pretos * mascara_pretos)
+        # Pretos: Afeta apenas pixels abaixo de 60 de luminosidade
+        mask_pretos = np.clip((60 - img_array) / 60, 0, 1) if pretos != 0 else 0
+        img_array += pretos * mask_pretos
 
-    # 3. Realces e Sombras (Ajuste fino)
-    if realces != 1.0:
-        img_array[img_array > 128] *= realces
-    if sombras != 1.0:
-        img_array[img_array <= 128] *= sombras
+        # 3. Realces e Sombras
+        if realces != 1.0:
+            img_array[img_array > 128] *= realces
+        if sombras != 1.0:
+            img_array[img_array <= 128] *= sombras
 
-    # Garante que as cores fiquem no limite de 0 a 255
-    img_array = np.clip(img_array, 0, 255).astype(np.uint8)
-    img = Image.fromarray(img_array)
-    
+        # Voltar para o formato de imagem
+        img_final = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+
+        # --- EXIBIÇÃO ---
+        st.image(img_final, caption="Resultado com Ajustes Seletivos", use_container_width=True)
+        
+        # Botão de Download
+        buf = io.BytesIO()
+        img_final.save(buf, format="JPEG")
+        st.download_button("📥 Baixar Foto Editada", data=buf.getvalue(), file_name="foto_editada.jpg", mime="image/jpeg")
+
+    except Exception as e:
+        st.error(f"Ops, deu erro ao processar a imagem: {e}")
+else:
+    st.info("Aguardando você subir uma foto...")
+        
